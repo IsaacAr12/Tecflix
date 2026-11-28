@@ -1,0 +1,103 @@
+# Integración continua (SPEC 10): compila, ejecuta las pruebas unitarias, exige 90 % de
+# cobertura de líneas (medida con gcov; reporte en formato LCOV) y empaqueta los
+# ejecutables como artefactos descargables de cada ejecución.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  metadata-api:
+    runs-on: ubuntu-24.04
+    services:
+      mongo:
+        image: mongo:7
+        ports: ["27017:27017"]
+    env:
+      # Activa las pruebas de RepositorioMongo contra el MongoDB del servicio.
+      TECFLIX_URI_MONGO_PRUEBAS: mongodb://localhost:27017/?serverSelectionTimeoutMS=5000
+    defaults:
+      run:
+        working-directory: tecflix-project
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependencias del sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libmongoc-dev libprotobuf-dev protobuf-compiler libcurl4-openssl-dev gcovr
+
+      - name: Compilar con cobertura
+        run: |
+          cmake -S metadata-api -B build-cov -DCMAKE_BUILD_TYPE=Release -DTECFLIX_COBERTURA=ON
+          cmake --build build-cov -j"$(nproc)"
+
+      - name: Pruebas unitarias
+        run: ctest --test-dir build-cov --output-on-failure
+
+      - name: Cobertura (mínimo 90 %)
+        run: >
+          gcovr -r . --filter 'metadata-api/src/' --filter 'common/src/' --exclude '.*main\.cpp'
+          --fail-under-line 90 --print-summary --lcov cobertura-metadata.info build-cov
+
+      - name: Compilar ejecutable final
+        run: |
+          cmake -S metadata-api -B build-release -DCMAKE_BUILD_TYPE=Release -DTECFLIX_PRUEBAS=OFF
+          cmake --build build-release -j"$(nproc)" --target metadata_api
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: metadata-api-linux-x64
+          path: tecflix-project/build-release/metadata_api
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cobertura-metadata-api
+          path: tecflix-project/cobertura-metadata.info
+          if-no-files-found: ignore
+
+  streaming-api:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: tecflix-project
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependencias del sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libprotobuf-dev protobuf-compiler libcurl4-openssl-dev gcovr
+
+      - name: Compilar con cobertura
+        run: |
+          cmake -S streaming-api -B build-cov -DCMAKE_BUILD_TYPE=Release -DTECFLIX_COBERTURA=ON
+          cmake --build build-cov -j"$(nproc)"
+
+      - name: Pruebas unitarias
+        run: ctest --test-dir build-cov --output-on-failure
+
+      - name: Cobertura (mínimo 90 %)
+        run: >
+          gcovr -r . --filter 'streaming-api/src/' --filter 'common/src/' --exclude '.*main\.cpp'
+          --fail-under-line 90 --print-summary --lcov cobertura-streaming.info build-cov
+
+      - name: Compilar ejecutable final
+        run: |
+          cmake -S streaming-api -B build-release -DCMAKE_BUILD_TYPE=Release -DTECFLIX_PRUEBAS=OFF
+          cmake --build build-release -j"$(nproc)" --target streaming_api
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: streaming-api-linux-x64
+          path: tecflix-project/build-release/streaming_api
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cobertura-streaming-api
+          path: tecflix-project/cobertura-streaming.info
+          if-no-files-found: ignore

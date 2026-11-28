@@ -1,0 +1,85 @@
+# Tecflix V1.0 en una sola máquina (SPEC 6.1 y 10).
+#   docker compose up --build
+# TOKEN_INTERNO se puede cambiar con un archivo .env junto a este archivo.
+#
+# El API de usuarios y la aplicación web se agregan aquí cuando estén listos; mientras
+# tanto, URL_API_USUARIOS apunta a http://user-api:8081.
+services:
+  mongo:
+    image: mongo:7
+    volumes:
+      - mongo_datos:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      retries: 10
+
+  aspire-dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:9.0
+    environment:
+      DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true"
+    ports:
+      - "18888:18888"   # interfaz: traces y métricas
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.115.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./observabilidad/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    depends_on:
+      - aspire-dashboard
+
+  prometheus:
+    image: prom/prometheus:v3.0.1
+    volumes:
+      - ./observabilidad/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - otel-collector
+
+  metadata-api:
+    build:
+      context: .
+      dockerfile: metadata-api/Dockerfile
+    environment:
+      PUERTO: "8082"
+      URI_MONGO: "mongodb://mongo:27017/?serverSelectionTimeoutMS=5000"
+      BD_MONGO: "tecflix"
+      TOKEN_INTERNO: "${TOKEN_INTERNO:-cambiar-este-token}"
+      ORIGEN_APP_WEB: "http://localhost:5173"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4318"
+    ports:
+      - "8082:8082"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+
+  streaming-api:
+    build:
+      context: .
+      dockerfile: streaming-api/Dockerfile
+    environment:
+      PUERTO: "8083"
+      URL_API_USUARIOS: "http://user-api:8081"
+      URL_API_METADATA: "http://metadata-api:8082"
+      TOKEN_INTERNO: "${TOKEN_INTERNO:-cambiar-este-token}"
+      ORIGEN_APP_WEB: "http://localhost:5173"
+      HILOS_TRANSCODIFICACION: "1"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4318"
+    volumes:
+      - videos:/datos/videos
+    ports:
+      - "8083:8083"
+    depends_on:
+      - metadata-api
+      - otel-collector
+
+volumes:
+  mongo_datos:
+  videos:

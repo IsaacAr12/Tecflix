@@ -1,0 +1,14 @@
+# Compilaciones locales y de CI
+build/
+build-*/
+**/build/
+**/build-*/
+# Videos y datos locales de los APIs
+datos/
+**/datos/
+# Reportes de cobertura
+*.gcda
+*.gcno
+*.info
+# Secretos de docker compose
+.env
