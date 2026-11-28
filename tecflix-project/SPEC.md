@@ -13,9 +13,11 @@ Tecflix es una plataforma distribuida de streaming de video compuesta por una ap
 ### B. API de Metadata (C++)
 - **Tipo:** REST API en C++.
 - **Almacenamiento de Datos:** Integración con base de datos MongoDB para gestionar la información de los catálogos.
+- **Detalle:** ver sección 7.
 
 ### C. API de Streaming (C++)
 - **Tipo:** REST API en C++ integrado con FFMPEG para transcodificación y segmentación de video en bloques multimedia.
+- **Detalle:** ver sección 8.
 
 ## 3. Diseño Detallado del Índice (Árbol B en Disco)
 Para garantizar el rendimiento óptimo exigido por la cátedra, el índice estructurado del API de Usuarios no utilizará punteros tradicionales en memoria RAM, sino desplazamientos de bytes fijos (`uint64_t`) para navegar por las páginas del archivo binario.
@@ -33,7 +35,7 @@ Para garantizar el rendimiento óptimo exigido por la cátedra, el índice estru
 
 ### 3.3 Gestión y Persistencia de Archivos
 - El archivo binario de índices maneja la persistencia directa mediante bloques de memoria del mismo tamaño mapeados con `reinterpret_cast<char*>(&nodo)`.
-- El puntero de la raíz (`raiz`) se almacena como una posición en bytes (`uint64_t`). Si el archivo está vacío o no existe, se inicializa un nodo raíz en la posición `0`.
+- El archivo de índices empieza con una cabecera de 8 bytes que guarda la posición de la raíz (`uint64_t`). Los nodos se escriben a partir del byte 8, por lo que la posición `0` significa "sin nodo" (hijo nulo o árbol vacío). Si el archivo no existe, se crea con la cabecera y un nodo raíz vacío en el byte 8.
 
 ## 4. Lógica Algorítmica y Control del Flujo en Disco
 
@@ -373,3 +375,4 @@ tecflix-project/
 │   └── tests/
 ├── web-app/
 └── .github/workflows/ci.yml
+```
